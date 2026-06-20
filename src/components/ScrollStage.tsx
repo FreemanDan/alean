@@ -171,7 +171,8 @@ export function ScrollStage({ children }: ScrollStageProps) {
       const investmentsToAdvantagesOverlap =
         investmentsExitTotalDuration > 0
           ? Math.min(
-              INVESTMENTS_TO_ADVANTAGES_OVERLAP,
+              /* На desktop overlap не нужен: иначе Advantages появляется слишком рано */
+              window.innerWidth > 1200 ? 0 : INVESTMENTS_TO_ADVANTAGES_OVERLAP,
               investmentsExitTotalDuration * 0.75,
             )
           : 0;
