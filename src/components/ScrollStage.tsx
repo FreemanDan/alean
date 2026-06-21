@@ -21,6 +21,8 @@ const INFRASTRUCTURE_SCROLL_DURATION = 0.9;
 const INVESTMENTS_REVEAL_DURATION = 1.15;
 const INVESTMENTS_EXIT_DURATION = 1.4;
 const INVESTMENTS_TO_ADVANTAGES_OVERLAP = 0.26;
+/* Длительность только фазы входа Investments (yPercent 100 → 0, y: 0), без прокрутки overflow */
+const THIRD_PANEL_ENTER_DURATION = 0.95;
 const ADVANTAGES_REVEAL_DURATION = 1;
 const LOCATION_REVEAL_DURATION = 1.5;
 const LOCATION_EXIT_DURATION = 0.75;
@@ -74,10 +76,19 @@ export function ScrollStage({ children }: ScrollStageProps) {
       const getPanelOverflow = (panel: HTMLElement) =>
         Math.max(panel.scrollHeight - window.innerHeight, 0);
       const getThirdPanelOverflow = () => getPanelOverflow(thirdPanel);
-      const getThirdPanelScrollDuration = () =>
-        Math.max(getThirdPanelOverflow() / window.innerHeight, 0.01);
-      const getThirdPanelPassDuration = () =>
-        0.95 + getThirdPanelScrollDuration();
+      /* Отдельная фаза прокрутки overflow после top-aligned входа; 0 если контент помещается в viewport */
+      const getThirdPanelScrollDuration = () => {
+        const overflow = getThirdPanelOverflow();
+
+        if (overflow <= 0) {
+          return 0;
+        }
+
+        return Math.max(overflow / window.innerHeight, 0.01);
+      };
+      /* На desktop (>1200px) Advantages не должен выглядывать до выхода Investments */
+      const getInvestmentsToAdvantagesOverlapValue = () =>
+        window.innerWidth > 1200 ? 0 : INVESTMENTS_TO_ADVANTAGES_OVERLAP;
       const getAboutScrollDuration = () =>
         Math.max(getAboutBgOverflow() / window.innerHeight, 0.01);
       const getPanelScrollDuration = (panel: HTMLElement) =>
@@ -171,8 +182,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
       const investmentsToAdvantagesOverlap =
         investmentsExitTotalDuration > 0
           ? Math.min(
-              /* На desktop overlap не нужен: иначе Advantages появляется слишком рано */
-              window.innerWidth > 1200 ? 0 : INVESTMENTS_TO_ADVANTAGES_OVERLAP,
+              getInvestmentsToAdvantagesOverlapValue(),
               investmentsExitTotalDuration * 0.75,
             )
           : 0;
@@ -303,15 +313,32 @@ export function ScrollStage({ children }: ScrollStageProps) {
           );
       }
 
+      /* Фаза A: вход Investments — верх секции выравнивается по viewport без сдвига y на overflow */
       timeline.to(
         thirdPanel,
         {
           yPercent: 0,
-          y: () => -getThirdPanelOverflow(),
+          y: 0,
           ease: "none",
-          duration: getThirdPanelPassDuration,
+          duration: THIRD_PANEL_ENTER_DURATION,
         },
         thirdPanelRevealStart + 0.3,
+      );
+
+      const thirdPanelTopAlignedAt =
+        thirdPanelRevealStart + 0.3 + THIRD_PANEL_ENTER_DURATION;
+
+      snapPoints.push(thirdPanelTopAlignedAt);
+
+      /* Фаза B: controlled-scroll внутри Investments, только если контент выше viewport */
+      timeline.to(
+        thirdPanel,
+        {
+          y: () => -getThirdPanelOverflow(),
+          ease: "none",
+          duration: getThirdPanelScrollDuration,
+        },
+        thirdPanelTopAlignedAt,
       );
 
       if (investmentsRevealElements.length > 0) {
@@ -329,7 +356,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
       }
 
       const investmentsExitStart =
-        thirdPanelRevealStart + getThirdPanelPassDuration();
+        thirdPanelTopAlignedAt + getThirdPanelScrollDuration();
 
       if (investmentsRevealElements.length > 0) {
         timeline.to(
