@@ -194,11 +194,30 @@ export function ScrollStage({ children }: ScrollStageProps) {
         });
       }
 
-      let overlayStart = 0;
+      /*
+       * Границы фаз Investments вычисляются до timeline:
+       * investmentsOverlayStart — неизменяемая граница конца Investments / начала первого overlay;
+       * overlayTimelineCursor — мутируемый курсор для сборки последующих overlay-панелей.
+       * snapTo читает только investmentsOverlayStart, не overlayTimelineCursor.
+       */
+      const thirdPanelTopAlignedAt =
+        thirdPanelRevealStart + 0.3 + THIRD_PANEL_ENTER_DURATION;
+      const investmentsExitStart =
+        thirdPanelTopAlignedAt + getThirdPanelScrollDuration();
+      const investmentsOverlayStart =
+        investmentsExitStart +
+        investmentsExitTotalDuration -
+        investmentsToAdvantagesOverlap;
+      const isDesktop = () => window.innerWidth > 1200;
+
       const snapPoints = [
         0,
         1,
+        thirdPanelTopAlignedAt,
+        investmentsOverlayStart,
       ];
+      let overlayTimelineCursor = investmentsOverlayStart;
+
       const timeline = gsap.timeline({
         scrollTrigger: {
           trigger: stage,
@@ -219,17 +238,38 @@ export function ScrollStage({ children }: ScrollStageProps) {
             duration: { min: 0.18, max: 0.45 },
             ease: "power1.inOut",
             snapTo: (progress) => {
-              const timelineProgress = progress * timeline.duration();
+              const duration = timeline.duration();
+              const timelineProgress = progress * duration;
 
+              /*
+               * Desktop: в зоне Investments snap только к top-safe (thirdPanelTopAlignedAt)
+               * или к концу Investments (investmentsOverlayStart) — без зависания в y < 0.
+               */
               if (
+                isDesktop() &&
                 timelineProgress > thirdPanelRevealStart &&
-                timelineProgress < overlayStart
+                timelineProgress < investmentsOverlayStart
+              ) {
+                return gsap.utils.snap(
+                  [
+                    thirdPanelTopAlignedAt / duration,
+                    investmentsOverlayStart / duration,
+                  ],
+                  progress,
+                );
+              }
+
+              /* Mobile: сохраняем свободный скролл внутри Investments без принудительного snap */
+              if (
+                !isDesktop() &&
+                timelineProgress > thirdPanelRevealStart &&
+                timelineProgress < investmentsOverlayStart
               ) {
                 return progress;
               }
 
               return gsap.utils.snap(
-                snapPoints.map((point) => point / timeline.duration()),
+                snapPoints.map((point) => point / duration),
                 progress,
               );
             },
@@ -325,11 +365,6 @@ export function ScrollStage({ children }: ScrollStageProps) {
         thirdPanelRevealStart + 0.3,
       );
 
-      const thirdPanelTopAlignedAt =
-        thirdPanelRevealStart + 0.3 + THIRD_PANEL_ENTER_DURATION;
-
-      snapPoints.push(thirdPanelTopAlignedAt);
-
       /* Фаза B: controlled-scroll внутри Investments, только если контент выше viewport */
       timeline.to(
         thirdPanel,
@@ -354,9 +389,6 @@ export function ScrollStage({ children }: ScrollStageProps) {
           thirdPanelRevealStart + 0.18,
         );
       }
-
-      const investmentsExitStart =
-        thirdPanelTopAlignedAt + getThirdPanelScrollDuration();
 
       if (investmentsRevealElements.length > 0) {
         timeline.to(
@@ -383,12 +415,6 @@ export function ScrollStage({ children }: ScrollStageProps) {
           investmentsExitStart,
         );
       }*/
-
-      overlayStart =
-        investmentsExitStart +
-        investmentsExitTotalDuration -
-        investmentsToAdvantagesOverlap;
-      snapPoints.push(overlayStart);
 
       overlayPanels.forEach((panel) => {
           const advantagesSection = gsap.utils.toArray<HTMLElement>(
@@ -490,7 +516,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -512,7 +538,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                         duration: 1,
                         ease: "power1.out",
                     },
-                    overlayStart += 0.3
+                    overlayTimelineCursor += 0.3
                 );
             }
 
@@ -548,7 +574,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "power1.in",
                       duration: 1,
                   },
-                  overlayStart += 0.3,
+                  overlayTimelineCursor += 0.3,
               );
           }
 
@@ -563,7 +589,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.5
+                  overlayTimelineCursor += 0.5
               );
           }
 
@@ -578,7 +604,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.5
+                  overlayTimelineCursor += 0.5
               );
           }
 
@@ -593,7 +619,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "power1.out",
                       duration: 2,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
               timeline.fromTo(
                   ConceptImageLeft,
@@ -605,7 +631,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "none",
                       duration: 1.5,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
           }
 
@@ -620,7 +646,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "power1.out",
                       duration: 2,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
               timeline.fromTo(
                   ConceptImageRight,
@@ -632,7 +658,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "none",
                       duration: 1.5,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
           }
 
@@ -644,7 +670,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.5
+                  overlayTimelineCursor += 0.5
               );
           }
 
@@ -656,7 +682,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -668,7 +694,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -680,7 +706,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -692,7 +718,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -704,7 +730,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -716,7 +742,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -728,7 +754,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -740,7 +766,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       duration: 1,
                       ease: "power1.out",
                   },
-                  overlayStart += 0.3
+                  overlayTimelineCursor += 0.3
               );
           }
 
@@ -777,7 +803,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "none",
                       duration: 0.55,
                   },
-                  overlayStart + 0.015,
+                  overlayTimelineCursor + 0.015,
               );
           }
 
@@ -794,7 +820,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "none",
                       duration: 0.7,
                   },
-                  overlayStart + 0.15,
+                  overlayTimelineCursor + 0.15,
               );
           }
 
@@ -811,14 +837,14 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "none",
                       duration: 1,
                   },
-                  overlayStart + 0.25,
+                  overlayTimelineCursor + 0.25,
               );
           }
 
 
 
           if (isIncomePanel) {
-              timeline.set(panel, {yPercent: 0}, overlayStart);
+              timeline.set(panel, {yPercent: 0}, overlayTimelineCursor);
           } else if (isLocationPanel) {
               timeline.to(
                   panel,
@@ -827,7 +853,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "none",
                       duration: LOCATION_REVEAL_DURATION,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
           } else {
               timeline.to(
@@ -837,7 +863,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "none",
                       duration: 0.95,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
           }
 
@@ -850,7 +876,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                           ease: "none",
                           duration: LOCATION_REVEAL_DURATION,
                       },
-                      overlayStart,
+                      overlayTimelineCursor,
                   );
               }
 
@@ -863,7 +889,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                           ease: "none",
                           duration: LOCATION_REVEAL_DURATION,
                       },
-                      overlayStart,
+                      overlayTimelineCursor,
                   );
               }
           }
@@ -876,7 +902,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "none",
                       duration: 0.95,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
           }
 
@@ -889,7 +915,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "power1.out",
                       duration: 0.35,
                   },
-                  overlayStart + 1,
+                  overlayTimelineCursor + 1,
               );
           }
 
@@ -903,7 +929,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       stagger: 0.12,
                       duration: ADVANTAGES_REVEAL_DURATION,
                   },
-                  overlayStart + 0.18,
+                  overlayTimelineCursor + 0.18,
               );
           }
 
@@ -917,7 +943,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       stagger: 0.12,
                       duration: CONCEPT_REVEAL_DURATION,
                   },
-                  overlayStart + 0.18,
+                  overlayTimelineCursor + 0.18,
               );
           }
 
@@ -932,7 +958,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "power1.out",
                       duration: 1,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
           }
 
@@ -947,13 +973,13 @@ export function ScrollStage({ children }: ScrollStageProps) {
                       ease: "power1.out",
                       duration: 1,
                   },
-                  overlayStart,
+                  overlayTimelineCursor,
               );
           }
 
 
-        overlayStart += isLocationPanel ? LOCATION_REVEAL_DURATION : 0.95;
-        snapPoints.push(overlayStart);
+        overlayTimelineCursor += isLocationPanel ? LOCATION_REVEAL_DURATION : 0.95;
+        snapPoints.push(overlayTimelineCursor);
 
         if (isLocationPanel) {
           if (locationContent) {
@@ -965,12 +991,12 @@ export function ScrollStage({ children }: ScrollStageProps) {
                 ease: "power1.in",
                 duration: LOCATION_EXIT_DURATION,
               },
-              overlayStart,
+              overlayTimelineCursor,
             );
           }
 
-          overlayStart += LOCATION_EXIT_DURATION;
-          snapPoints.push(overlayStart);
+          overlayTimelineCursor += LOCATION_EXIT_DURATION;
+          snapPoints.push(overlayTimelineCursor);
         }
 
         const scrollDrivenSlider = panel.querySelector<HTMLElement>(
@@ -1008,7 +1034,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
               y: 32,
             });
           }
-          snapPoints.push(overlayStart + infrastructureDuration);
+          snapPoints.push(overlayTimelineCursor + infrastructureDuration);
 
           if (infrastructureImage) {
             timeline.to(
@@ -1018,7 +1044,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                 ease: "power1.inOut",
                 duration: INFRASTRUCTURE_REVEAL_DURATION,
               },
-              overlayStart,
+              overlayTimelineCursor,
             );
           }
 
@@ -1032,7 +1058,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                 ease: "power1.out",
                 duration: INFRASTRUCTURE_REVEAL_DURATION,
               },
-              overlayStart + INFRASTRUCTURE_REVEAL_DURATION * 0.36,
+              overlayTimelineCursor + INFRASTRUCTURE_REVEAL_DURATION * 0.36,
             );
           }
 
@@ -1045,7 +1071,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
                 ease: "power1.out",
                 duration: INFRASTRUCTURE_REVEAL_DURATION * 0.48,
               },
-              overlayStart + INFRASTRUCTURE_REVEAL_DURATION * 0.36,
+              overlayTimelineCursor + INFRASTRUCTURE_REVEAL_DURATION * 0.36,
             );
           }
 
@@ -1057,11 +1083,11 @@ export function ScrollStage({ children }: ScrollStageProps) {
                 ease: "none",
                 duration: INFRASTRUCTURE_SCROLL_DURATION * 0.2,
               },
-              overlayStart + INFRASTRUCTURE_REVEAL_DURATION,
+              overlayTimelineCursor + INFRASTRUCTURE_REVEAL_DURATION,
             );
           }
 
-          overlayStart += infrastructureDuration * 0.6;
+          overlayTimelineCursor += infrastructureDuration * 0.6;
         }
 
         if (scrollDrivenSlider && scrollDrivenDuration > 0) {
@@ -1073,7 +1099,7 @@ export function ScrollStage({ children }: ScrollStageProps) {
 
           for (let step = 1; step <= scrollDrivenSteps; step += 1) {
             snapPoints.push(
-              overlayStart +
+              overlayTimelineCursor +
                 scrollDrivenDuration * (step / scrollDrivenSteps),
             );
           }
@@ -1094,10 +1120,10 @@ export function ScrollStage({ children }: ScrollStageProps) {
                 );
               },
             },
-            overlayStart,
+            overlayTimelineCursor,
           );
 
-          overlayStart += scrollDrivenDuration;
+          overlayTimelineCursor += scrollDrivenDuration;
         }
 
         const scrollDuration = getPanelScrollDuration(panel);
@@ -1110,11 +1136,11 @@ export function ScrollStage({ children }: ScrollStageProps) {
               ease: "none",
               duration: scrollDuration,
             },
-            overlayStart,
+            overlayTimelineCursor,
           );
 
-          overlayStart += scrollDuration;
-          snapPoints.push(overlayStart);
+          overlayTimelineCursor += scrollDuration;
+          snapPoints.push(overlayTimelineCursor);
         }
 
       });
